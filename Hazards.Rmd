@@ -29,22 +29,7 @@ model <- lmer(h_Index ~ Male + indig + Educ + eng + Married + emp + Aprehen + ho
 summary(model)
 ```
 
-```{r}
-#This is the Mixed effects model with Hazard_Index as outcome var and rescaled.
 
-# Rescale the numeric predictors
-df$Educ <- scale(df$Educ)
-df$Aprehen <- scale(df$Aprehen)
-df$hom_rt <- scale(df$hom_rt)
-df$Companions <- scale(df$Companions)
-df$Age <- scale(df$Age)
-
-# Run the model again after rescaling
-model_rescaled <- lmer(h_Index ~ Male + indig + Educ + eng + Married + emp + Aprehen + hom_rt_corrected + Smugg_decision + Reason_family + rel_border + alone + Age + (1| City), data = df)
-
-# View the summary
-summary(model_rescaled)
-```
 ```{r}
 # Load necessary packages
 library(MASS)
@@ -56,7 +41,6 @@ m_total <- glm.nb(h_Index ~ Male + indig + Educ + Married + emp + Aprehen +
                          Ln_hom_rt_corrected + Experience + Companions + Age +
                          factor(City), data = df)
 
-# View the summary
 summary(m_total)
 
 ```
@@ -67,7 +51,6 @@ m_male <- glm.nb(h_Index ~ Male + indig + Educ + Married + emp + Aprehen +
                          Ln_male_hom_rt_corrected + Experience + Companions + Age +
                          factor(City), data = df)
 
-# View the summary
 summary(m_male)
 ```
 
@@ -82,12 +65,10 @@ results <- bind_rows(
   tidy(m_male)  %>% mutate(model = "Male Homicide Rate")
 )
 
-# You can keep all predictors or filter to your variables of interest:
 my_terms <- c("Ln_hom_rt_corrected", "Ln_male_hom_rt_corrected",
               "Male", "indig", "Educ", "Married", "emp", "Aprehen", "Experience", "Companions", "Age")
 results <- results %>% filter(term %in% my_terms)
 
-# Relabel predictor names for display
 results <- results %>%
   mutate(term = recode(term,
                        'Ln_hom_rt_corrected' = 'Log Homicide Rate',
@@ -153,11 +134,9 @@ anova(model_rescaled, model_nb_fixed)
 
 ```{r}
 
-# Load libraries
 library(plm)
 library(lmtest)
 
-# Load the data
 df <- read.csv("/Users/oscarfernandocontreras/Library/CloudStorage/Dropbox/2025/ACADEMIC PAPERS/When Elephants/data_state_with_contested.csv")
 
 # Prepare for panel data (state-year panel)
@@ -231,7 +210,6 @@ predictor_labels <- c(
 ```
 
 ```{r}
-# Filter: keep only significant cities + all other variables
 plot_data <- tidy_model %>%
   mutate(
     is_city = grepl("City", term),
@@ -277,7 +255,7 @@ print(p)
 
 ```
 ```{r}
-# Filter: keep only significant cities + all other variables
+
 plot_data <- tidy_model %>%
   mutate(
     is_city = grepl("City", term),
@@ -290,7 +268,7 @@ plot_data <- tidy_model %>%
                    predictor_labels[term], term)
   )
 
-# Create the plot with updated labels
+
 p <- ggplot(plot_data, aes(x = estimate, y = reorder(label, estimate),
                            xmin = estimate - 1.96 * std.error,
                            xmax = estimate + 1.96 * std.error,
@@ -323,7 +301,7 @@ print(p)
 ```
 
 ```{r}
-# Prepare plot data: keep only significant cities + all other variables
+
 plot_data <- tidy_model %>%
   mutate(
     is_city = grepl("City", term),
@@ -380,10 +358,8 @@ library(ggplot2)
 library(dplyr)
 library(readr)
 
-# Read in the CSV (replace the file path as needed)
 cities <- read_csv("border_cities_coords.csv")
 
-# Optional: make clusters as factors with names
 cluster_names <- c("Risk Level 1", "Risk Level 2", "Risk Level 3")
 cities$Cluster <- factor(cities$Cluster, levels = 1:3, labels = cluster_names)
 
@@ -403,14 +379,12 @@ library(ggplot2)
 library(dplyr)
 library(readr)
 
-# Read in the CSV (replace the file path as needed)
+
 cities <- read_csv("border_cities_coords.csv")
 
-# Optional: make clusters as factors with names
 cluster_names <- c("Risk Level 1", "Risk Level 2", "Risk Level 3")
 cities$Cluster <- factor(cities$Cluster, levels = 1:3, labels = cluster_names)
 
-# Add centroids/positions for Mexican border states
 state_labels <- data.frame(
   state = c("Baja California", "Sonora", "Chihuahua", "Coahuila", "Nuevo León", "Tamaulipas"),
   lon = c(-115, -111.5, -106.5, -102.5, -100, -98),
@@ -449,13 +423,11 @@ library(sf)
 library(ggplot2)
 library(readr)
 
-# Download and unzip GADM shapefile, then provide the .shp path:
 mx_states <- st_read("/Users/oscarfernandocontreras/Library/CloudStorage/Dropbox/2025/ACADEMIC PAPERS/When Elephants/gadm41_MEX_shp/gadm41_MEX_1.shp")
 # Filter for border states (same names as before or as in shapefile)
 border_states <- c("Baja California", "Sonora", "Chihuahua", "Coahuila", "Nuevo León", "Tamaulipas")
 mx_states_border <- mx_states %>% filter(NAME_1 %in% border_states) # Or use the right column name
 
-# Plot with your data as before!
 ggplot() +
   geom_sf(data = mx_states_border, fill = NA, color = "black", size = 0.7) +
   # ...rest of your code (cities, labels, etc.)
@@ -470,7 +442,6 @@ library(dplyr)
 library(readr)
 
 
-# Read city data and prepare as before
 cities <- read_csv("border_cities_coords.csv")
 cluster_names <- c("Risk Level 1", "Risk Level 2", "Risk Level 3")
 cities$Cluster <- factor(cities$Cluster, levels = 1:3, labels = cluster_names)

@@ -1,0 +1,508 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+
+```{r}
+library(dplyr)
+library(tidyverse)
+
+df <- read.csv("EMIF_CBP_corrected.csv")
+df
+
+
+
+
+```
+
+```{r}
+#This is the Mixed Effects Model with Hazard_Index as outcome var. 
+
+library(lme4)
+
+df$City <- as.factor(df$City)
+
+model <- lmer(h_Index ~ Male + indig + Educ + eng + Married + emp + Aprehen + hom_rt + Smugg_decision + Reason_family + rel_border + alone + Age + (1| City), data = df)
+
+summary(model)
+```
+
+```{r}
+#This is the Mixed effects model with Hazard_Index as outcome var and rescaled.
+
+# Rescale the numeric predictors
+df$Educ <- scale(df$Educ)
+df$Aprehen <- scale(df$Aprehen)
+df$hom_rt <- scale(df$hom_rt)
+df$Companions <- scale(df$Companions)
+df$Age <- scale(df$Age)
+
+# Run the model again after rescaling
+model_rescaled <- lmer(h_Index ~ Male + indig + Educ + eng + Married + emp + Aprehen + hom_rt_corrected + Smugg_decision + Reason_family + rel_border + alone + Age + (1| City), data = df)
+
+# View the summary
+summary(model_rescaled)
+```
+```{r}
+# Load necessary packages
+library(MASS)
+
+#This is the Negative Binomial with Fixed Effects for City. 
+
+# Run the Negative Binomial model with City as a Fixed Effect
+m_total <- glm.nb(h_Index ~ Male + indig + Educ + Married + emp + Aprehen +
+                         Ln_hom_rt_corrected + Experience + Companions + Age +
+                         factor(City), data = df)
+
+# View the summary
+summary(m_total)
+
+```
+
+```{r}
+# Run the Negative Binomial model with City as a Fixed Effect
+m_male <- glm.nb(h_Index ~ Male + indig + Educ + Married + emp + Aprehen +
+                         Ln_male_hom_rt_corrected + Experience + Companions + Age +
+                         factor(City), data = df)
+
+# View the summary
+summary(m_male)
+```
+
+
+```{r}
+library(dotwhisker)
+library(dplyr)
+library(broom)
+
+results <- bind_rows(
+  tidy(m_total) %>% mutate(model = "Total Homicide Rate"),
+  tidy(m_male)  %>% mutate(model = "Male Homicide Rate")
+)
+
+# You can keep all predictors or filter to your variables of interest:
+my_terms <- c("Ln_hom_rt_corrected", "Ln_male_hom_rt_corrected",
+              "Male", "indig", "Educ", "Married", "emp", "Aprehen", "Experience", "Companions", "Age")
+results <- results %>% filter(term %in% my_terms)
+
+# Relabel predictor names for display
+results <- results %>%
+  mutate(term = recode(term,
+                       'Ln_hom_rt_corrected' = 'Log Homicide Rate',
+                       'Ln_male_hom_rt_corrected' = 'Log Male Homicide Rate',
+                       'emp' = 'Employed',
+                       'Aprehen' = 'Apprehended',
+                       'indig' = 'Indigenous',
+                       'Educ' = 'Educational Attainment',
+                       'Experience' = 'Migration Experience',
+                       'Companions' = 'Companions'
+                       
+                       ))
+
+# Facet by model
+dwplot(results, dot_args = list(aes(color = model))) +
+  facet_wrap(~model) +
+  theme_minimal() +
+  labs(title = "Effects on Migrant Risk Index",
+       x = "Coefficient Estimate (95% CI)",
+       color = "Model") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 12, face = "bold")
+  )
+```
+```{r}
+stargazer(
+  m_total, m_male,
+  title = "Effects of Homicide Rates on Migrant Risk Index (Negative Binomial, City FE)",
+  type = "latex",     # use "text" to preview in R console, "html" for HTML
+  column.labels = c("Total homicide rate", "Male homicide rate"),
+  covariate.labels = c(
+    "Male", "Indigenous", "Educational Attainment", "Married",
+    "Employed", "Apprehended", "Log Homicide Rate", "Log Male Homicide Rate",
+    "Migration Experience", "Companions", "Age"
+  ),
+  dep.var.labels = c("Risk Index"),
+  model.names = FALSE,
+  omit = "factor\\(City\\)",      # omit City fixed effects
+  star.cutoffs = c(0.1, 0.05, 0.01),
+  no.space = TRUE,
+  digits = 3,
+  notes = "Robust SE clustered by city. City FE included."
+)
+
+```
+
+```{r}
+# Here I compare the Mixed Effects Model and the Fixed Effects Model
+#ME has 16 params
+#FE has 37 params
+
+#AIC and BIC penalize model complexity. Lower vals = better model fit. 
+#Log LIkelihood = model's goodness of fit, with higher values indicating better fit. 
+#Deviance = reflects fit, with lower values indicating a better model. 
+#Chi-Square Test and p-value. = High test statistic (4450) and 21 dof indicates
+#a significant difference between the models. 
+
+anova(model_rescaled, model_nb_fixed)
+```
+
+
+
+
+```{r}
+
+# Load libraries
+library(plm)
+library(lmtest)
+
+# Load the data
+df <- read.csv("/Users/oscarfernandocontreras/Library/CloudStorage/Dropbox/2025/ACADEMIC PAPERS/When Elephants/data_state_with_contested.csv")
+
+# Prepare for panel data (state-year panel)
+df_panel <- pdata.frame(df, index = c("STATE", "YEAR"))
+```
+
+
+
+```{r}
+fe_total_time <- plm(TOTAL_RATE ~ Contestation_Level + factor(YEAR), data = df_panel, model = "within")
+summary(fe_total_time)
+
+coeftest(fe_total_time, vcov = vcovHC(fe_total_time, type = "HC1", cluster = "group"))
+```
+
+```{r}
+fe_male_time <- plm(MALE_RATE ~ Contestation_Level + factor(YEAR), data = df_panel, model = "within")
+summary(fe_male_time)
+
+coeftest(fe_male_time, vcov = vcovHC(fe_male_time, type = "HC1", cluster = "group"))
+```
+
+
+```{r}
+library(stargazer)
+library(lmtest)
+library(sandwich)
+
+ct1 <- coeftest(fe_total_time, vcov = cl_vcov(fe_total_time))
+ct2 <- coeftest(fe_male_time, vcov = cl_vcov(fe_male_time))
+
+stargazer(fe_total_time, fe_male_time,
+          se = list(ct1[, "Std. Error"], ct2[, "Std. Error"]),
+          type = "latex",
+          keep = c("Contestation_Level"),
+          dep.var.labels = c("Total homicide rate", "Male homicide rate"),
+          title = "Effect of Contestation Level on Homicide Rates (Two-Way Fixed Effects Models)",
+          covariate.labels = c("Contestation Level"),
+          notes = "Robust standard errors clustered by state. State and year fixed effects included.")
+
+```
+
+
+
+```{r}
+predictor_labels <- c(
+  Age = "Age",
+  Educ = "Educational Attainment",
+  Married1 = "Married",
+  Male1 = "Male",
+  emp = "Employed",
+  indig = "Indigenous",
+  Experience = "Migration Experience",
+  Companions = "Companions",
+  Aprehen = "CBP Apprehensions",
+  Ln_male_hom_rt_corrected = "Log of Male Homicide Rate",
+  `factor(City)3` = "Tijuana",
+  `factor(City)4` = "Sonoyta",
+  `factor(City)10` = "San Luis Río Colorado",
+  `factor(City)11` = "Sáric",
+  `factor(City)12` = "Sásabe",
+  `factor(City)17` = "Ciudad Acuña",
+  `factor(City)18` = "Piedras Negras",
+  `factor(City)20` = "Matamoros",
+  `factor(City)21` = "Nuevo Laredo",
+  `factor(City)22` = "Reynosa",
+  `factor(City)23` = "Miguel Alemán"
+)
+
+
+```
+
+```{r}
+# Filter: keep only significant cities + all other variables
+plot_data <- tidy_model %>%
+  mutate(
+    is_city = grepl("City", term),
+    is_significant = p.value < 0.05
+  ) %>%
+  filter(!is_city | (is_city & is_significant)) %>%  # drop non-significant cities
+  mutate(
+    group = ifelse(is_city, "City", "Other Variable"),
+    label = ifelse(term %in% names(predictor_labels),
+                   predictor_labels[term], term)
+  )
+
+# Create the plot with updated labels
+p <- ggplot(plot_data, aes(x = estimate, y = reorder(label, estimate),
+                           xmin = estimate - 1.96 * std.error,
+                           xmax = estimate + 1.96 * std.error,
+                           color = group, alpha = group)) +
+  geom_point(size = 2) +
+  geom_errorbarh(height = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  scale_color_manual(values = c(
+    "City" = "firebrick",
+    "Other Variable" = "gray70"
+  )) +
+  scale_alpha_manual(values = c(
+    "City" = 1,
+    "Other Variable" = 0.4
+  )) +
+  labs(
+    x = "Coefficient Estimate (95% CI)",
+    y = "",
+    title = "Effects of Cities of Crossing on Migrant Risk Index"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    legend.position = "none"
+  )
+
+print(p)
+
+```
+```{r}
+# Filter: keep only significant cities + all other variables
+plot_data <- tidy_model %>%
+  mutate(
+    is_city = grepl("City", term),
+    is_significant = p.value < 0.05
+  ) %>%
+  filter(is_city & is_significant) %>%  # drop non-significant cities
+  mutate(
+    group = ifelse(is_city, "City", "Other Variable"),
+    label = ifelse(term %in% names(predictor_labels),
+                   predictor_labels[term], term)
+  )
+
+# Create the plot with updated labels
+p <- ggplot(plot_data, aes(x = estimate, y = reorder(label, estimate),
+                           xmin = estimate - 1.96 * std.error,
+                           xmax = estimate + 1.96 * std.error,
+                           color = group, alpha = group)) +
+  geom_point(size = 2) +
+  geom_errorbarh(height = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  scale_color_manual(values = c(
+    "City" = "firebrick",
+    "Other Variable" = "gray70"
+  )) +
+  scale_alpha_manual(values = c(
+    "City" = 1,
+    "Other Variable" = 0.4
+  )) +
+  labs(
+    x = "Coefficient Estimate (95% CI)",
+    y = "",
+    title = "Effects of Cities of Crossing on Migrant Risk Index"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(size = 10, face = "bold", hjust = 0.5),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    legend.position = "none"
+  )
+
+print(p)
+```
+
+```{r}
+# Prepare plot data: keep only significant cities + all other variables
+plot_data <- tidy_model %>%
+  mutate(
+    is_city = grepl("City", term),
+    is_significant = p.value < 0.05
+  ) %>%
+  filter(!is_city | (is_city & is_significant)) %>%
+  mutate(
+    group = case_when(
+      is_city & estimate > 0 ~ "Eastern Border Cities",
+      is_city & estimate < 0 ~ "Western Border Cities",
+      TRUE ~ "Other Variables"
+    ),
+    label = ifelse(term %in% names(predictor_labels),
+                   predictor_labels[term], term)
+  )
+
+# Create the plot
+p <- ggplot(plot_data, aes(x = estimate, y = reorder(label, estimate),
+                           xmin = estimate - 1.96 * std.error,
+                           xmax = estimate + 1.96 * std.error,
+                           color = group)) +
+  geom_point(size = 2) +
+  geom_errorbarh(height = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  scale_color_manual(values = c(
+    "Eastern Border Cities" = "firebrick",
+    "Western Border Cities" = "steelblue",
+    "Other Variable" = "gray70"
+  )) +
+  labs(
+    x = "Coefficient Estimate (95% CI)",
+    y = "",
+    title = "Effects on Migrant Risk Index",
+    color = "Group"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(size = 10, face = "bold", hjust = 0.0),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    legend.position = "bottom"
+  )
+
+print(p)
+
+```
+```{r}
+install.packages("maps")
+```
+
+```{r}
+# Load libraries
+library(ggplot2)
+library(dplyr)
+library(readr)
+
+# Read in the CSV (replace the file path as needed)
+cities <- read_csv("border_cities_coords.csv")
+
+# Optional: make clusters as factors with names
+cluster_names <- c("Risk Level 1", "Risk Level 2", "Risk Level 3")
+cities$Cluster <- factor(cities$Cluster, levels = 1:3, labels = cluster_names)
+
+# Plot
+ggplot() +
+  borders("world", regions = c("Mexico", "USA"), fill = "gray95", colour = "gray80") +
+  geom_point(data = cities, aes(x = Longitude, y = Latitude, color = Cluster), size = 3) +
+  geom_text(data = cities, aes(x = Longitude, y = Latitude, label = Border), hjust = -0.1, vjust = -0.5, size = 1) +
+  scale_color_manual(values = c("orange", "forestgreen", "dodgerblue3")) +
+  labs(title = "US-Mexico Border Cities by Risk Cluster", color = "Risk Cluster") + coord_quickmap(xlim = c(-118, -96), ylim = c(24, 34)) +
+  theme_minimal(base_size = 10)
+
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+
+# Read in the CSV (replace the file path as needed)
+cities <- read_csv("border_cities_coords.csv")
+
+# Optional: make clusters as factors with names
+cluster_names <- c("Risk Level 1", "Risk Level 2", "Risk Level 3")
+cities$Cluster <- factor(cities$Cluster, levels = 1:3, labels = cluster_names)
+
+# Add centroids/positions for Mexican border states
+state_labels <- data.frame(
+  state = c("Baja California", "Sonora", "Chihuahua", "Coahuila", "Nuevo León", "Tamaulipas"),
+  lon = c(-115, -111.5, -106.5, -102.5, -100, -98),
+  lat = c(30.7, 29.7, 29, 28.5, 27.5, 25.7)
+)
+
+# Plot
+ggplot() +
+  borders("world", regions = c("Mexico", "USA"), fill = "gray95", colour = "gray80") +
+  geom_point(data = cities, aes(x = Longitude, y = Latitude, color = Cluster), size = 3) +
+  geom_text(data = cities, aes(x = Longitude, y = Latitude, label = Border), hjust = -0.1, vjust = -0.5, size = 1) +
+  # Add state names
+  geom_text(data = state_labels, aes(x = lon, y = lat, label = state), 
+            fontface = "bold", size = 3, color = "gray30", alpha = 0.9) +
+  scale_color_manual(values = c("orange", "forestgreen", "dodgerblue3")) +
+  labs(
+    title = "US-Mexico Border Cities by Risk Cluster",
+    color = "Risk Cluster"
+  ) + 
+  coord_quickmap(xlim = c(-118, -96), ylim = c(24, 34)) +
+  theme_minimal(base_size = 10) +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x  = element_blank(),
+    axis.text.y  = element_blank(),
+    axis.ticks   = element_blank()
+  )
+
+```
+
+
+
+```{r}
+library(sf)
+library(ggplot2)
+library(readr)
+
+# Download and unzip GADM shapefile, then provide the .shp path:
+mx_states <- st_read("/Users/oscarfernandocontreras/Library/CloudStorage/Dropbox/2025/ACADEMIC PAPERS/When Elephants/gadm41_MEX_shp/gadm41_MEX_1.shp")
+# Filter for border states (same names as before or as in shapefile)
+border_states <- c("Baja California", "Sonora", "Chihuahua", "Coahuila", "Nuevo León", "Tamaulipas")
+mx_states_border <- mx_states %>% filter(NAME_1 %in% border_states) # Or use the right column name
+
+# Plot with your data as before!
+ggplot() +
+  geom_sf(data = mx_states_border, fill = NA, color = "black", size = 0.7) +
+  # ...rest of your code (cities, labels, etc.)
+  coord_sf(xlim = c(-118, -96), ylim = c(24, 34))
+
+```
+
+```{r}
+library(sf)
+library(ggplot2)
+library(dplyr)
+library(readr)
+
+
+# Read city data and prepare as before
+cities <- read_csv("border_cities_coords.csv")
+cluster_names <- c("Risk Level 1", "Risk Level 2", "Risk Level 3")
+cities$Cluster <- factor(cities$Cluster, levels = 1:3, labels = cluster_names)
+
+state_labels <- data.frame(
+  state = c("Baja California", "Sonora", "Chihuahua", "Coahuila", "Nuevo León", "Tamaulipas"),
+  lon = c(-115, -111.5, -106.5, -102.5, -100, -98),
+  lat = c(30.7, 29.7, 29, 28.5, 27.5, 25.7)
+)
+
+ggplot() +
+  borders("world", regions = c("Mexico", "USA"), fill = "gray95", colour = "gray80") +
+  geom_sf(data = mx_states, fill = NA, color = "gray40", size = 0.5) +
+  geom_point(data = cities, aes(x = Longitude, y = Latitude, color = Cluster), size = 3) +
+  geom_text(data = cities, aes(x = Longitude, y = Latitude, label = Border), hjust = -0.1, vjust = -0.5, size = 1) +
+  geom_text(data = state_labels, aes(x = lon, y = lat, label = state),
+            fontface = "bold", size = 3, color = "gray30", alpha = 0.9) +
+  scale_color_manual(values = c("orange", "forestgreen", "dodgerblue3")) +
+  labs(
+    title = "US-Mexico Border Cities by Risk Cluster",
+    color = "Risk Cluster"
+  ) +
+  coord_sf(xlim = c(-118, -96), ylim = c(24, 34), expand = FALSE) +  # <--- the fix
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    axis.text.x  = element_blank(),
+    axis.text.y  = element_blank(),
+    axis.ticks   = element_blank()
+  )
+
+```
+

@@ -2,10 +2,6 @@
 title: "Risk_Index_Violence"
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
 ```{r}
 #Hypothesis I: Contestation associated with Violence
 

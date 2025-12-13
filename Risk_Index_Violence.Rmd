@@ -1,0 +1,352 @@
+---
+title: "Risk_Index_Violence"
+output: html_document
+date: "2025-12-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Hypothesis I: Contestation associated with Violence
+
+library(plm)
+library(lmtest)
+
+df <- read.csv("/Users/oscarfernandocontreras/Library/CloudStorage/Dropbox/2025/ACADEMIC PAPERS/When Elephants/data_state_with_contested.csv")
+
+# Panel data (state-year panel)
+df_panel <- pdata.frame(df, index = c("STATE", "YEAR"))
+
+
+#Panel Data Analysis with Fixed Effects for Year and State
+#Total Homicide Rate
+fe_total_time <- plm(TOTAL_RATE ~ Contestation_Level + factor(YEAR) + factor(STATE), data = df_panel, model = "within")
+summary(fe_total_time)
+
+coeftest(fe_total_time, vcov = vcovHC(fe_total_time, type = "HC1", cluster = "group"))
+
+
+fe_male_time <- plm(MALE_RATE ~ Contestation_Level + factor(YEAR) + factor(STATE), data = df_panel, model = "within")
+summary(fe_male_time)
+
+coeftest(fe_male_time, vcov = vcovHC(fe_male_time, type = "HC1", cluster = "group"))
+
+```
+
+```{r}
+#Hypothesis II: Risk Index and Homicide Rates as proxy of Cartel Contestation
+library(dplyr)
+library(tidyverse)
+library(sandwich)
+library(MASS)
+
+df <- read.csv("EMIF_CBP_corrected_FINAL.csv")
+df
+
+df$City <- as.factor(df$City)
+df$Female <- as.factor(df$Female)
+df$indig <- as.factor(df$indig)
+df$eng <- as.factor(df$eng)
+df$emp <- as.factor(df$emp)
+df$Married <- as.factor(df$Married)
+df$Smugg_decision <- as.factor(df$Smugg_decision)
+df$rel_border <- as.factor(df$rel_border)
+df$Ln_male_hom_rt_corrected <- as.numeric(df$Ln_male_hom_rt_corrected)
+df$Ln_male_hom_rt_corrected <- as.numeric(df$Ln_male_hom_rt_corrected)
+df$ln_aprehen <- log(df$Aprehen + .001)
+# Per 10,000 apprehensions
+df$Aprehen_10k <- df$Aprehen / 10000
+
+
+
+#Total homicide rate model: Negative Binomial with Fixed Effects for City and Year
+m_total <- glm.nb(h_Index ~ Female + indig + Educ + Married + emp + Aprehen_10k +
+                         Ln_hom_rt_corrected + Experience + Companions + Age +
+                         factor(City) + factor(Year), data = df)
+
+summary(m_total)
+
+
+coeftest(m_total, vcov = vcovCL(m_total, cluster = ~City))
+
+#Male Homicide Rate Model: Negative Binomial with Fixed Effects for City and Year
+m_male <- glm.nb(h_Index ~ Female + indig + Educ + Married + emp  + Aprehen_10k +
+                         Ln_male_hom_rt_corrected + Experience + Companions + Age +
+                         factor(City) + factor(Year), data = df)
+
+summary(m_male)
+
+```
+
+```{r}
+#Sensitivity Analyses. Models 1 and 2 with Robust SE clustered by city. 
+
+coeftest(m_total, vcov = vcovCL(m_total, cluster = ~City))
+
+coeftest(m_male, vcov = vcovHC(m_male, cluster = ~ City))
+
+```
+
+```{r}
+#Coefficients Plot (Models 1 and 2)
+library(broom)
+library(dotwhisker)
+library(ggplot2)
+
+
+results <- bind_rows(
+  tidy(m_total) %>% mutate(model = "Total Homicide Rate"),
+  tidy(m_male)  %>% mutate(model = "Male Homicide Rate")
+)
+
+
+my_terms <- c("Ln_hom_rt_corrected", "Ln_male_hom_rt_corrected",
+              "emp1", "Aprehen_10k", "Age", "Female1", "indig1")
+
+results <- results %>% 
+  filter(term %in% my_terms) %>%
+  mutate(term = recode(term,
+                       'Ln_hom_rt_corrected' = 'Total Homicide Rate',
+                       'Ln_male_hom_rt_corrected' = 'Male Homicide Rate',
+                       'emp1' = 'Employed',
+                       'Aprehen_10k' = 'Border Enforcement',
+                       'indig1' = 'Indigenous',
+                       'Female1' = 'Female'))
+
+# Faceted coefficient plot
+dwplot(results, dot_args = list(aes(color = model))) +
+  facet_wrap(~model, scales = "free_x") +  # You can add scales="free_x" for balance
+  geom_vline(xintercept = 0, linetype = "dotted", color = "grey50", linewidth = 0.4) +
+  theme_minimal(base_size = 8) +
+  labs(
+       x = "Coefficient Estimate (95% CI)",
+       y = NULL,
+       color = "Model") +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 8, face = "bold"),
+    panel.spacing = unit(1.2, "cm"),       # <-- Add more space between panels
+    axis.text.x = element_text(size = 8), # Ensure labels don’t overlap
+    strip.text = element_text(face = "bold", size = 8)
+  )
+
+ggsave("effects_migrant_risk_index.png", dpi=600)
+
+```
+
+```{r}
+#FE Coefficients Plot
+
+tidy_results <- broom::tidy(m_male) %>%
+  filter(term != "(Intercept)")  
+
+predictor_labels <- c(
+  Age = "Age",
+  Female1 = "Female",
+  emp1 = "Employed",
+  indig1 = "Indigenous",
+  Aprehen_10k = "Border Control",
+  Ln_male_hom_rt_corrected = "Male Homicide Rate",
+  `factor(City)3` = "Tijuana",
+  `factor(City)4` = "Sonoyta",
+  `factor(City)10` = "San Luis Río Colorado",
+  `factor(City)11` = "Sáric",
+  `factor(City)12` = "Sásabe",
+  `factor(City)17` = "Ciudad Acuña",
+  `factor(City)18` = "Piedras Negras",
+  `factor(City)20` = "Matamoros",
+  `factor(City)21` = "Nuevo Laredo",
+  `factor(City)22` = "Reynosa",
+  `factor(City)23` = "Miguel Alemán"
+)
+
+variables_to_plot <- c(
+  "Age", "emp1", "indig1", "Female1", "Aprehen_10k", "Ln_male_hom_rt_corrected",
+  "factor(City)3", "factor(City)4", "factor(City)10", "factor(City)11",
+  "factor(City)12", "factor(City)17", "factor(City)18", "factor(City)20",
+  "factor(City)21", "factor(City)22", "factor(City)23"
+)
+
+plot_data <- tidy_results %>%
+  filter(term %in% variables_to_plot) %>% 
+  mutate(
+    is_city = grepl("City", term),
+    is_significant = p.value < 0.05,
+    group = case_when(
+      is_city & estimate > 0 ~ "Eastern Border Cities",
+      is_city & estimate < 0 ~ "Western Border Cities",
+      TRUE ~ "Other Variables"
+    ),
+    label = ifelse(term %in% names(predictor_labels),
+                   predictor_labels[term], term)
+  )
+
+ggplot(plot_data, aes(x = estimate, y = reorder(label, estimate),
+                      xmin = estimate - 1.96 * std.error,
+                      xmax = estimate + 1.96 * std.error,
+                      color = group)) +
+  geom_point(size = 2) +
+  geom_errorbarh(height = 0.2) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  scale_color_manual(values = c(
+    "Eastern Border Cities" = "firebrick",
+    "Western Border Cities" = "steelblue",
+    "Other Variables" = "gray70"
+  )) +
+  labs(
+    x = "Coefficient Estimate (95% CI)",
+    y = "",
+    color = "Group"
+  ) +
+  theme_minimal(base_size = 6) +
+  theme(
+    plot.title = element_text(size = 6, face = "bold", hjust = 0.3),
+    axis.title = element_text(size = 6),
+    axis.text = element_text(size = 6),
+    legend.position = "bottom"
+  )
+
+ggsave(
+  "east_vs_west_fixed_effects.png",
+  width = 6, height = 4, units = "in",
+  dpi = 600
+)
+
+```
+
+```{r}
+
+#Hypothesis III: Regions of Risk
+library(ggdendro)
+
+df <- read.csv("EMIF_CBP_corrected.csv")
+
+city_df <- df %>%
+  dplyr::group_by(City) %>%
+  dplyr::summarise(across(dplyr::starts_with("h_"), \(x) mean(x, na.rm = TRUE)))
+
+# Robust scaling
+robust_scale <- function(x) (x - median(x, na.rm = TRUE)) / IQR(x, na.rm = TRUE)
+city_scaled <- city_df %>%
+  dplyr::mutate(across(dplyr::starts_with("h_"), robust_scale))
+
+risk_vars <- dplyr::select(city_scaled, dplyr::starts_with("h_"))
+rownames(risk_vars) <- city_df$City
+
+# Distance + hierarchical clustering
+dist_matrix <- dist(risk_vars, method = "euclidean")
+hc <- hclust(dist_matrix, method = "ward.D2")
+
+# Dendrogram data and clusters
+dend_data <- ggdendro::dendro_data(hc, type = "rectangle")
+
+k <- 3
+clusters <- cutree(hc, k = k)
+cluster_color_map <- c("2" = "#FDD835",  
+                       "1" = "#FB8C00",  
+                       "3" = "#B71C1C") 
+
+p <- ggplot() +
+  geom_segment(
+    data = dend_data$segments,
+    aes(x = x, y = y, xend = xend, yend = yend),
+    color = "grey35", linewidth = 0.5
+  ) +
+  geom_text(
+    data = dend_data$labels,
+    aes(x = x, y = y - 0.1, label = label,
+        color = factor(clusters[hc$order])),
+    size = 2.8, vjust = 1
+  ) +
+  scale_color_manual(values = cluster_color_map, guide = "none") +
+  labs(x = NULL, y = "Height") +
+  theme_minimal(base_size = 10, base_family = "Times New Roman") +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.y = element_text(size = 10),
+    legend.position = "none",
+    panel.grid = element_blank(),
+    plot.margin = margin(5, 5, 5, 5)
+  )
+
+ggsave("Hierarchical_Dendrogram_clean.png", plot = p,
+       width = 8, height = 5, dpi = 600)
+
+```
+
+```{r}
+library(cluster)
+library(factoextra)
+library(patchwork)
+
+risk_vars <- city_scaled %>% dplyr::select(starts_with("h_"))
+
+dist_matrix <- dist(risk_vars, method = "euclidean")
+
+# Elbow Method
+wss <- map_dbl(1:10, function(k) {
+  kmeans(risk_vars, centers = k, nstart = 25)$tot.withinss
+})
+
+elbow_df <- tibble(k = 1:10, wss = wss)
+
+# visually chosen elbow (≈3)
+elbow_k <- 3  
+
+elbow_plot <- ggplot(elbow_df, aes(x = k, y = wss)) +
+  geom_line(linewidth = 1, color = "#0072B2") +
+  geom_point(size = 2.5, color = "#D55E00") +
+  geom_vline(xintercept = elbow_k, linetype = "dashed",
+             color = "gray40", linewidth = 0.6) +
+  scale_x_continuous(breaks = 1:10) +
+  labs(x = "Number of Clusters", y = "Total Within-Cluster Sum of Squares") +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.title = element_text(face = "plain"),
+    axis.text = element_text(color = "black"),
+    plot.title = element_blank()
+  )
+
+# Silhouette Analysis
+sil_df <- map_dfr(2:10, function(k) {
+  km <- kmeans(risk_vars, centers = k, nstart = 25)
+  ss <- silhouette(km$cluster, dist_matrix)
+  tibble(k = k, silhouette = mean(ss[, 3]))
+})
+
+# find optimal silhouette automatically
+opt_k <- sil_df$k[which.max(sil_df$silhouette)]
+
+sil_plot <- ggplot(sil_df, aes(x = k, y = silhouette)) +
+  geom_line(linewidth = 1, color = "#009E73") +
+  geom_point(size = 2.5, color = "#E69F00") +
+  geom_vline(xintercept = opt_k, linetype = "dashed",
+             color = "gray40", linewidth = 0.6) +
+  scale_x_continuous(breaks = 2:10) +
+  labs(x = "Number of Clusters", y = "Average Silhouette Width") +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    axis.title = element_text(face = "plain"),
+    axis.text = element_text(color = "black"),
+    plot.title = element_blank()
+  )
+
+combined_plot <- elbow_plot + sil_plot + plot_layout(ncol = 2)
+
+ggsave("Elbow_Silhouette_Combined_dashed.png",
+       plot = combined_plot,
+       dpi = 600,
+       width = 10, height = 4.5, units = "in")
+
+```
+
+```{r}
+
+```
+

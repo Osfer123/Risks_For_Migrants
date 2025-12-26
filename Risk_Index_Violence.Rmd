@@ -19,7 +19,7 @@ summary(fe_total_time)
 
 coeftest(fe_total_time, vcov = vcovHC(fe_total_time, type = "HC1", cluster = "group"))
 
-
+#Male Homicide Rate
 fe_male_time <- plm(MALE_RATE ~ Contestation_Level + factor(YEAR) + factor(STATE), data = df_panel, model = "within")
 summary(fe_male_time)
 
@@ -212,7 +212,7 @@ ggsave(
 #Hypothesis III: Regions of Risk
 library(ggdendro)
 
-df <- read.csv("EMIF_CBP_corrected.csv")
+df <- read.csv("EMIF_CBP.csv")
 
 city_df <- df %>%
   dplyr::group_by(City) %>%

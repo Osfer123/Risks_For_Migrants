@@ -61,8 +61,6 @@ m_total <- glm.nb(h_Index ~ Female + indig + Educ + Married + emp + Aprehen_10k 
 summary(m_total)
 
 
-coeftest(m_total, vcov = vcovCL(m_total, cluster = ~City))
-
 #Male Homicide Rate Model: Negative Binomial with Fixed Effects for City and Year
 m_male <- glm.nb(h_Index ~ Female + indig + Educ + Married + emp  + Aprehen_10k +
                          Ln_male_hom_rt_corrected + Experience + Companions + Age +
@@ -72,14 +70,6 @@ summary(m_male)
 
 ```
 
-```{r}
-#Sensitivity Analyses. Models 1 and 2 with Robust SE clustered by city. 
-
-coeftest(m_total, vcov = vcovCL(m_total, cluster = ~City))
-
-coeftest(m_male, vcov = vcovHC(m_male, cluster = ~ City))
-
-```
 
 ```{r}
 #Coefficients Plot (Models 1 and 2)
